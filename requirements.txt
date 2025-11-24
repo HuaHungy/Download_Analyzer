@@ -1,0 +1,5 @@
+huggingface_hub==1.1.5
+matplotlib==3.10.7
+pandas==2.3.3
+schedule==1.2.2
+seaborn==0.13.2
