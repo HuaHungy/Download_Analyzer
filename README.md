@@ -1,81 +1,106 @@
-# HuggingFace数据集分析器
+# HuggingFace / ModelScope 数据集分析器（按文件顺序）
 
-一个基于Python的自动化工具，用于分析和可视化HuggingFace组织下的数据集下载情况。该工具支持多线程数据获取、自动可视化生成、定期调度运行等功能。
+本项目包含三个分析器文件，按使用频率与功能排序：`hf_analyzer.py` → `hf_analyzer_local.py` → `ms_analyzer_local.py`。支持数据抓取、统计、CSV导出、可视化图表以及 Web/API 服务。
 
-## 功能特点
-
-- 基于Hugginface API的多线程数据获取
-- 数据分析与可视化
-- 任务自动定时调度运行
-
-## 安装依赖
+## 依赖安装
 
 ```bash
-pip install -r requirements.txt
+pip install huggingface_hub pandas seaborn matplotlib flask requests schedule
 ```
 
-## 使用方法
+---
 
-### 基本使用（立即运行）
+## 1) hf_analyzer.py（Web/API + 定时/CLI）
 
+- 功能：
+  - 抓取 HuggingFace 组织数据集下载量，生成 CSV 与可视化 PNG
+  - 提供 Web 页面和 API 接口
+  - 支持 Favicon 自定义、ModelScope 对比、静态文件下载
+  - 未设置 `HF_ANALYZER_FLASK=1` 时，可作为定时任务或一次性运行入口
+
+- 启动 Web 服务：
 ```bash
-python analyzer.py --now
+HF_ANALYZER_FLASK=1 PORT=8000 python /home/kemove/Analyzer/hf_analyzer.py
 ```
+  - 访问 `http://localhost:8000/` 查看可视化页面
+  - 可通过 URL 参数控制：`ms_org_name`、`save_root`、`max_workers`、`favicon`
 
-### 定时任务模式
+- 常用接口：
+  - `GET /health`：健康检查
+  - `GET /`：渲染页面并执行分析，输出 CSV 与图表
+  - `POST /analyze`：触发分析，返回统计摘要（JSON）
+  - `GET /static_plot?path=<abs_path>`：返回图表 PNG
+  - `GET /static_csv?path=<abs_path>`：下载 CSV
+  - `GET /static_favicon?path=<abs_path>`：按扩展名返回 PNG/ICO/JPEG 图标
+  - `GET /favicon.ico`：默认站点图标（支持回退到 PNG）
 
+- API 示例：
 ```bash
-# 每天00:00自动运行
-python analyzer.py --time "00:00"
-
-# 自定义组织和分析时间
-python analyzer.py --org_name "RoboCOIN" --time "09:00" --max_workers 12
+curl -X POST "http://localhost:8000/analyze" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "org_name": "RoboCOIN",
+        "ms_org_name": "RoboCOIN",
+        "save_root": "/home/kemove/Analyzer/stats",
+        "max_workers": 8
+      }'
 ```
 
-### 参数说明
+- 自定义图标：
+  - 环境变量：`FAVICON_PATH=/home/kemove/Analyzer/assert/logo.ico`
+  - URL 参数：`http://localhost:8000/?favicon=/home/kemove/Analyzer/assert/logo.png`
 
-| 参数 | 类型 | 默认值 | 说明 |
-|-----|------|------|--------|
-| --org_name | str | "RoboCOIN" | 要分析的HuggingFace组织名 |
-| --save_root | str | "stats/" | 结果保存根目录 |
-| --max_workers | int | 8 | 最大工作线程数 |
-| --time | str | "00:00" | 每日运行时间（HH:MM） |
-| --now | flag | False | 立即运行而不调度 |
-
-### 输出结果
-
-工具运行后会在指定目录生成以下文件：
-
+- 定时/CLI 运行：
 ```bash
-stats/
-└── YYYYMMDD_HHMMSS/          # 时间戳目录
-    ├── dataset_downloads.csv  # 完整数据集下载数据
-    ├── analysis_summary.csv  # 分析摘要统计
-    └── top_datasets_plot.png # Top 100数据集可视化图表
+# 立即执行一次（直接运行任务）
+python /home/kemove/Analyzer/hf_analyzer.py --now
+
+# 每天 00:00 执行（需安装 schedule 包）
+python /home/kemove/Analyzer/hf_analyzer.py --time "00:00" --org_name "RoboCOIN" --max_workers 8
 ```
 
-### 示例输出
+- 输出目录：
+  - 使用 `save_root/YYYYMMDD_HHMMSS/` 结构，包含：
+    - `dataset_downloads.csv`
+    - `analysis_summary.csv`
+    - `top_datasets_plot.png`
 
+---
+
+## 2) hf_analyzer_local.py（本地库版 HF 分析器）
+
+- 用途：在本地以库方式运行 HuggingFace 数据分析与图表生成（保存到 `stats/`）。
+- 典型使用（Python 交互/脚本中）：
+```python
+from hf_analyzer_local import HuggingFaceDatasetAnalyzer
+
+analyzer = HuggingFaceDatasetAnalyzer(org_name="RoboCOIN", save_root="stats", max_workers=8)
+analyzer.run()  # 将生成 CSV 与 top_datasets_plot.png
+```
+
+- 说明：该文件不包含 CLI 入口（无 `if __name__ == "__main__"`），推荐按上述方式导入调用。
+
+---
+
+## 3) ms_analyzer_local.py（ModelScope 下载统计脚本）
+
+- 用途：抓取 `RoboCOIN` 在 ModelScope 的各数据集下载量并汇总总和，保存 CSV。
+- 运行：
 ```bash
-Fetching dataset list...
-Processing 150 datasets with 8 workers...
-✓ dataset1: 15000 downloads
-✓ dataset2: 12000 downloads
-...
-Successfully processed 145 datasets
-Total downloads: 1,234,567
-
-=== Enhanced Analysis ===
-Download statistics:
-  - Mean: 8,512
-  - Median: 1,234
-  - Max: 150,000
-  - Min: 0
-  - Std: 12,345
-
-=== Analysis Summary ===
-Total datasets processed: 150
-Successful fetches: 145
-Top dataset: example-dataset with 150,000 downloads
-Total downloads: 1,234,567
+python /home/kemove/Analyzer/ms_analyzer_local.py
 ```
+- 输出：
+  - 控制台打印总下载量与数据集列表
+  - 生成 `robocoin_datasets_downloads.csv`
+
+---
+
+## 常见问题
+
+- 浏览器图标仍显示默认地球：请清空浏览器缓存或使用隐私模式访问；也可在地址栏添加 `?favicon=/home/kemove/Analyzer/assert/logo.png` 强制注入。
+- 未安装 `schedule`：`hf_analyzer.py` 会提示安装；如需定时功能，执行：`pip install schedule`。
+- 权限问题：确保 `save_root` 与图标路径对运行用户可读写；路径需为绝对路径。
+
+## 许可
+
+仅用于数据统计与可视化示例。根据实际需求调整组织名称、保存目录与任务参数。
