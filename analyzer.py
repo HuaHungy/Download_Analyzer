@@ -100,36 +100,43 @@ class HuggingFaceDatasetAnalyzer:
     
     def fetch_datasets_multithreaded(self) -> None:
         """
-        使用多线程获取数据集信息
-        
-        Args:
-            max_datasets: 最大数据集数量
+        优先使用 list_datasets 的聚合信息快速获取下载量，
+        仅对缺失下载量的条目再并发调用 dataset_info 作为回退。
         """
-        print("Fetching dataset list...")
+        # print("Fetching dataset list...")
         datasets = list(self.api.list_datasets(author=self.org_name))
-        
-        print(f"Processing {len(datasets)} datasets with {self.max_workers} workers...")
-        
+        # print(f"Found {len(datasets)} datasets. Using fast-path where possible...")
+
         self.datasets = []
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_dataset = {
-                executor.submit(self.fetch_single_dataset, dataset.id): dataset.id 
-                for dataset in datasets
-            }
-            
-            for future in as_completed(future_to_dataset):
-                dataset_name = future_to_dataset[future]
-                try:
-                    result = future.result()
-                    self.datasets.append(result)
-                    
-                    if result.success and result.downloads > 0:
-                        print(f"✓ {dataset_name}: {result.downloads} downloads")
-                    elif not result.success:
-                        print(f"✗ {dataset_name}: Failed to fetch")
-                        
-                except Exception as e:
-                    print(f"Error processing {dataset_name}: {e}")
+        fast_count = 0
+        missing_ids = []
+        for d in datasets:
+            downloads = getattr(d, "downloads", None)
+            likes = getattr(d, "likes", 0)
+            tags = getattr(d, "tags", [])
+            if downloads is not None:
+                self.datasets.append(DatasetInfo(name=d.id, downloads=downloads, likes=likes, tags=tags, success=True))
+                fast_count += 1
+            else:
+                missing_ids.append(d.id)
+
+        if missing_ids:
+            print(f"Fetching detailed info for {len(missing_ids)} datasets with {self.max_workers} workers...")
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                future_to_dataset = {executor.submit(self.fetch_single_dataset, dataset_id): dataset_id for dataset_id in missing_ids}
+                for future in as_completed(future_to_dataset):
+                    dataset_name = future_to_dataset[future]
+                    try:
+                        result = future.result()
+                        self.datasets.append(result)
+                        if result.success and result.downloads > 0:
+                            print(f"✓ {dataset_name}: {result.downloads} downloads")
+                        elif not result.success:
+                            print(f"✗ {dataset_name}: Failed to fetch")
+                    except Exception as e:
+                        print(f"Error processing {dataset_name}: {e}")
+
+        # print(f"Fast-path fetched {fast_count} datasets without per-item API calls")
     
     def process_data(self) -> None:
         """处理获取的数据并转换为DataFrame"""
@@ -151,12 +158,11 @@ class HuggingFaceDatasetAnalyzer:
         self.processed_data = self.dataframe[self.dataframe['success'] == True].copy()
         self.processed_data = self.processed_data.sort_values('downloads', ascending=False)
         
-        print(f"Successfully processed {len(self.processed_data)} datasets")
-        print(f"Total downloads: {self.processed_data['downloads'].sum():,}")
+        # print(f"Successfully processed {len(self.processed_data)} datasets")
+        # print(f"Total downloads: {self.processed_data['downloads'].sum():,}")
     
-        save_path = os.path.join(self.save_root, "dataset_downloads.csv")
+        save_path = os.path.join(self.save_root, "huggingface_dataset_downloads.csv")
         self.processed_data.to_csv(save_path, index=False)
-        print(f"Data saved to '{save_path}'")
 
     def visualize_top_datasets(self) -> None:
         """
@@ -229,7 +235,7 @@ class HuggingFaceDatasetAnalyzer:
             )
         
         plt.tight_layout()
-        plt.savefig(os.path.join(self.save_root, "top_datasets_plot.png"), dpi=300, bbox_inches='tight', facecolor='#0b0c15')
+        plt.savefig(os.path.join(self.save_root, "huggingface_top_datasets_plot.png"), dpi=300, bbox_inches='tight', facecolor='#0b0c15')
         plt.close()
     
     def enhanced_analysis(self) -> None:
@@ -237,56 +243,14 @@ class HuggingFaceDatasetAnalyzer:
         if self.processed_data is None:
             raise ValueError("No processed data available.")
         
-        print("\n=== Enhanced Analysis ===")
-        
-        # 基本统计
+        # 基本统计（console output disabled）
         downloads = self.processed_data['downloads']
-        print(f"Download statistics:")
-        print(f"  - Mean: {downloads.mean():.0f}")
-        print(f"  - Median: {downloads.median():.0f}")
-        print(f"  - Max: {downloads.max():,}")
-        print(f"  - Min: {downloads.min():,}")
-        print(f"  - Std: {downloads.std():.0f}")
         
-        # 标签分析（如果有标签数据）
-        if 'tags' in self.processed_data.columns and len(self.processed_data) > 0:
-            self._analyze_tags()
-    
-    def _analyze_tags(self) -> None:
-        """分析数据集标签（内部方法）"""
-        all_tags = []
-        for tags in self.processed_data['tags']:
-            if isinstance(tags, list):
-                all_tags.extend(tags)
-        
-        if all_tags:
-            tag_counts = pd.Series(all_tags).value_counts().head(10)
-            print("\nTop 10 most common tags:")
-            for tag, count in tag_counts.items():
-                print(f"  - {tag}: {count}")
-
+        # 标签分析已移除
     def process_summary(self) -> None:
         """获取分析摘要"""
         if self.processed_data is None:
             raise ValueError("No processed data available.")
-        
-        print("\n=== Analysis Summary ===")
-        print(f"Total datasets processed: {len(self.datasets)}")
-        print(f"Successful fetches: {len(self.processed_data)}")
-        print(f"Top dataset: {self.processed_data.iloc[0]['dataset_name']} "
-              f"with {self.processed_data.iloc[0]['downloads']:,} downloads")
-        print(f"Total downloads: {self.processed_data['downloads'].sum():,}")
-
-        summary_df = pd.DataFrame({
-            'Total Datasets': [len(self.datasets)],
-            'Successful Fetches': [len(self.processed_data)],
-            'Total Downloads': [self.processed_data['downloads'].sum()],
-            'Mean Downloads': [self.processed_data['downloads'].mean()],
-        })
-
-        save_path = os.path.join(self.save_root, "analysis_summary.csv")
-        summary_df.to_csv(save_path, index=False)
-        print(f"Summary saved to '{save_path}'")
 
 
 class ModelScopeDatasetAnalyzer:
@@ -434,10 +398,10 @@ def create_app() -> Flask:
             "modelscope_total_downloads": ms_total,
             "combined_total_downloads": hf_total + ms_total,
             "save_dir": save_path_root,
-            "csv_path": os.path.join(save_path_root, "dataset_downloads.csv"),
+            "csv_path": os.path.join(save_path_root, "huggingface_dataset_downloads.csv"),
             "ms_csv_path": os.path.join(save_path_root, "modelscope_dataset_downloads.csv"),
-            "summary_path": os.path.join(save_path_root, "analysis_summary.csv"),
-            "plot_path": os.path.join(save_path_root, "top_datasets_plot.png"),
+            "summary_path": None,
+            "plot_path": os.path.join(save_path_root, "huggingface_top_datasets_plot.png"),
         }
         return jsonify(summary)
 
@@ -454,8 +418,8 @@ def create_app() -> Flask:
         os.makedirs(save_path_root, exist_ok=True)
         analyzer = HuggingFaceDatasetAnalyzer(org_name, save_path_root, max_workers)
         df = analyzer.run()
-        csv_path = os.path.join(save_path_root, "dataset_downloads.csv")
-        plot_path = os.path.join(save_path_root, "top_datasets_plot.png")
+        csv_path = os.path.join(save_path_root, "huggingface_dataset_downloads.csv")
+        plot_path = os.path.join(save_path_root, "huggingface_top_datasets_plot.png")
         if not os.path.isabs(plot_path):
             plot_path = os.path.abspath(plot_path)
         total_dl = int(df["downloads"].sum()) if df is not None and not df.empty else 0
@@ -484,7 +448,7 @@ def create_app() -> Flask:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HF ANALYZER // {org_name.upper()}</title>
+    <title>{org_name.upper()} DOWNLOAD ANALYZER</title>
     {default_favicon_tag}
     {favicon_tag}
     <style>
@@ -921,7 +885,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HuggingFace Dataset Analyzer Scheduler")
     parser.add_argument("--org_name", type=str, default="RoboCOIN", help="Organization name")
     parser.add_argument("--save_root", type=str, default=DEFAULT_SAVE_ROOT, help="Root directory to save stats")
-    parser.add_argument("--max_workers", type=int, default=8, help="Maximum number of worker threads")
+    parser.add_argument("--max_workers", type=int, default=32, help="Maximum number of worker threads")
     parser.add_argument("--time", type=str, default="00:00", help="Time to run daily (HH:MM)")
     parser.add_argument("--now", action="store_true", help="Run the task immediately instead of scheduling")
     
