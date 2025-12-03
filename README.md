@@ -10,7 +10,7 @@ pip install huggingface_hub pandas seaborn matplotlib flask requests schedule
 
 ---
 
-## 1) hf_analyzer.py（Web/API + 定时/CLI）
+## hf_analyzer.py（Web/API + 定时/CLI）
 
 - 功能：
   - 抓取 HuggingFace 组织数据集下载量，生成 CSV 与可视化 PNG
@@ -67,7 +67,7 @@ python /home/kemove/Analyzer/hf_analyzer.py --time "00:00" --org_name "RoboCOIN"
 
 ---
 
-## 2) hf_analyzer_local.py（本地库版 HF 分析器）
+## hf_analyzer_local.py（本地库版 HF 分析器）
 
 - 用途：在本地以库方式运行 HuggingFace 数据分析与图表生成（保存到 `stats/`）。
 - 典型使用（Python 交互/脚本中）：
@@ -82,7 +82,7 @@ analyzer.run()  # 将生成 CSV 与 top_datasets_plot.png
 
 ---
 
-## 3) ms_analyzer_local.py（ModelScope 下载统计脚本）
+## ms_analyzer_local.py（ModelScope 下载统计脚本）
 
 - 用途：抓取 `RoboCOIN` 在 ModelScope 的各数据集下载量并汇总总和，保存 CSV。
 - 运行：
@@ -94,12 +94,6 @@ python /home/kemove/Analyzer/ms_analyzer_local.py
   - 生成 `robocoin_datasets_downloads.csv`
 
 ---
-
-## 常见问题
-
-- 浏览器图标仍显示默认地球：请清空浏览器缓存或使用隐私模式访问；也可在地址栏添加 `?favicon=/home/kemove/Analyzer/assert/logo.png` 强制注入。
-- 未安装 `schedule`：`hf_analyzer.py` 会提示安装；如需定时功能，执行：`pip install schedule`。
-- 权限问题：确保 `save_root` 与图标路径对运行用户可读写；路径需为绝对路径。
 
 ## 许可
 
