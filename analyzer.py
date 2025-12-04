@@ -407,7 +407,7 @@ def create_app() -> Flask:
 
     @app.get("/")
     def view():
-        org_name = "RoboCOIN"
+        org_name = request.args.get("org_name", "RoboCOIN")
         save_root = request.args.get("save_root", DEFAULT_SAVE_ROOT)
         try:
             max_workers = int(request.args.get("max_workers", 8))

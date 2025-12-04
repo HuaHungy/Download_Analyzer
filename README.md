@@ -20,7 +20,9 @@ pip install -r requirements.txt
 ```bash
 HF_ANALYZER_FLASK=1 PORT=8000 python /home/kemove/Analyzer/analyzer.py
 ```
-访问 `http://localhost:8000/`；URL 支持：`ms_org_name`、`save_root`、`max_workers`、`favicon`。
+访问 `http://localhost:8000/`；URL 支持：`org_name`（HF 组织）、`ms_org_name`（ModelScope 组织）、`save_root`、`max_workers`、`favicon`。
+
+可在本地修改网址后缀直接查看其他数据集下载情况，如 `http://localhost:8000/?org_name=YourOrg`。
 
 - 常用接口
   - `GET /health`
@@ -37,11 +39,11 @@ HF_ANALYZER_FLASK=1 PORT=8000 python /home/kemove/Analyzer/analyzer.py
 
 - CLI 示例
 ```bash
-# 立即执行一次
-python /home/kemove/Analyzer/analyzer.py --now --org_name RoboCOIN --max_workers 32
+# 立即执行一次（支持任一组织）
+python /home/kemove/Analyzer/analyzer.py --now --org_name YourOrg --max_workers 32
 
-# 每日定时（需安装 schedule）
-python /home/kemove/Analyzer/analyzer.py --time "00:00" --org_name RoboCOIN --max_workers 16
+# 每日定时（支持任一组织，需安装 schedule）
+python /home/kemove/Analyzer/analyzer.py --time "00:00" --org_name YourOrg --max_workers 16
 ```
 
 - 输出目录结构
@@ -65,11 +67,11 @@ analyzer.run()
 
 ## ms_analyzer_local.py（ModelScope 脚本）
 
-- 抓取 `RoboCOIN` 在 ModelScope 的各数据集下载量，总和并保存 CSV
+- 抓取指定组织在 ModelScope 的各数据集下载量，总和并保存 CSV
 ```bash
 python /home/kemove/Analyzer/ms_analyzer_local.py
 ```
-输出：`robocoin_datasets_downloads.csv`
+输出：`<org>_datasets_downloads.csv`（脚本当前默认使用 `RoboCOIN`，可按需修改 org）
 
 ## 常见问题
 
