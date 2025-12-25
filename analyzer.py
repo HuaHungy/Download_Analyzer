@@ -76,8 +76,13 @@ class HuggingFaceDatasetAnalyzer:
             DatasetInfo: 数据集信息对象
         """
         try:
-            dataset_info = self.api.dataset_info(dataset_name)
-            downloads = getattr(dataset_info, 'downloads', 0)
+            dataset_info = None
+            try:
+                dataset_info = self.api.dataset_info(dataset_name, expand=["downloadsAllTime"])
+            except TypeError:
+                dataset_info = self.api.dataset_info(dataset_name)
+            downloads_all_time = getattr(dataset_info, 'downloads_all_time', None)
+            downloads = downloads_all_time if downloads_all_time is not None else getattr(dataset_info, 'downloads', 0)
             likes = getattr(dataset_info, 'likes', 0)
             tags = getattr(dataset_info, 'tags', [])
             
@@ -104,14 +109,18 @@ class HuggingFaceDatasetAnalyzer:
         仅对缺失下载量的条目再并发调用 dataset_info 作为回退。
         """
         # print("Fetching dataset list...")
-        datasets = list(self.api.list_datasets(author=self.org_name))
-        # print(f"Found {len(datasets)} datasets. Using fast-path where possible...")
-
+        try:
+            datasets = list(self.api.list_datasets(author=self.org_name, expand=["downloadsAllTime"]))
+        except TypeError:
+            datasets = list(self.api.list_datasets(author=self.org_name))
+        
         self.datasets = []
         fast_count = 0
         missing_ids = []
         for d in datasets:
-            downloads = getattr(d, "downloads", None)
+            downloads_all_time = getattr(d, "downloads_all_time", None)
+            last30_downloads = getattr(d, "downloads", None)
+            downloads = downloads_all_time if downloads_all_time is not None else last30_downloads
             likes = getattr(d, "likes", 0)
             tags = getattr(d, "tags", [])
             if downloads is not None:
